@@ -18,10 +18,17 @@ function CreateSurveyPage() {
   const [heroImage, setHeroImage] = useState(null);
   const [heroImagePreview, setHeroImagePreview] = useState(null);
 
+  // Date fields
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [hasEndDate, setHasEndDate] = useState(false);
+
   // Questions
   const [questions, setQuestions] = useState([
     { id: 1, question: '', answers: [{ id: 1, text: '', score: 0 }] }
   ]);
+
+  const [isSaving, setIsSaving] = useState(false);
 
   // Handle Image Upload
   const handleImageUpload = (e) => {
@@ -119,6 +126,21 @@ function CreateSurveyPage() {
       return false;
     }
 
+    if (!startDate) {
+      alert('❌ กรุณาเลือกวันที่เริ่มต้น');
+      return false;
+    }
+
+    if (hasEndDate && !endDate) {
+      alert('❌ กรุณาเลือกวันที่สิ้นสุด');
+      return false;
+    }
+
+    if (hasEndDate && new Date(endDate) < new Date(startDate)) {
+      alert('❌ วันที่สิ้นสุดต้องมากกว่าวันที่เริ่มต้น');
+      return false;
+    }
+
     // Check if all questions have text
     const emptyQuestions = questions.filter(q => !q.question.trim());
     if (emptyQuestions.length > 0) {
@@ -138,21 +160,23 @@ function CreateSurveyPage() {
     return true;
   };
 
-  // Submit
+  // Submit - Save to Firebase
   const handleSubmit = async () => {
     if (!validateForm()) return;
-  
+
+    setIsSaving(true);
+
     try {
       let imageUrl = null;
-  
-      // Upload image if exists
+
+      // Upload image to Firebase Storage
       if (heroImage) {
         const imageRef = ref(storage, `surveys/${Date.now()}_${heroImage.name}`);
         await uploadBytes(imageRef, heroImage);
         imageUrl = await getDownloadURL(imageRef);
       }
-  
-      // Save to Firestore
+
+      // Prepare survey data
       const surveyData = {
         title: surveyTitle,
         description: surveyDescription,
@@ -160,19 +184,33 @@ function CreateSurveyPage() {
         phone: phone,
         diseaseInfo: diseaseInfo,
         intro: introText,
-        heroImage: imageUrl,
-        questions: questions,
+        image: imageUrl,
+        startDate: startDate,
+        endDate: hasEndDate ? endDate : null,
+        hasEndDate: hasEndDate,
+        questions: questions.map(q => ({
+          question: q.question,
+          answers: q.answers.map(a => ({
+            text: a.text,
+            score: a.score
+          }))
+        })),
+        active: true,
         createdAt: new Date().toISOString(),
-        active: true
+        updatedAt: new Date().toISOString()
       };
-  
-      await addDoc(collection(db, 'surveys'), surveyData);
-  
+
+      // Save to Firestore
+      const docRef = await addDoc(collection(db, 'surveys'), surveyData);
+      
+      console.log('Survey saved with ID:', docRef.id);
       alert('✅ สร้างแบบประเมินสำเร็จ!');
       navigate('/admin');
     } catch (error) {
       console.error('Error saving survey:', error);
       alert('❌ เกิดข้อผิดพลาด: ' + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -185,7 +223,7 @@ function CreateSurveyPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header - Mobile Responsive */}
+      {/* Header */}
       <header className="border-b sticky top-0 bg-white z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
@@ -199,6 +237,7 @@ function CreateSurveyPage() {
             <button 
               onClick={handleBack}
               className="text-gray-600 hover:text-black transition-colors p-2"
+              disabled={isSaving}
             >
               <X size={20} className="sm:w-6 sm:h-6" />
             </button>
@@ -207,7 +246,7 @@ function CreateSurveyPage() {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {/* Basic Information - Mobile Responsive */}
+        {/* Basic Information */}
         <div className="space-y-6 sm:space-y-8 mb-8 sm:mb-12">
           <div className="mb-4 sm:mb-6">
             <h2 className="text-xl sm:text-2xl font-bold mb-1">ข้อมูลพื้นฐาน</h2>
@@ -225,6 +264,7 @@ function CreateSurveyPage() {
               onChange={(e) => setSurveyTitle(e.target.value)}
               placeholder="เช่น แบบประเมินความเสี่ยงโรคเบาหวาน"
               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+              disabled={isSaving}
             />
           </div>
 
@@ -239,6 +279,7 @@ function CreateSurveyPage() {
               placeholder="อธิบายวัตถุประสงค์และรายละเอียดของแบบประเมิน"
               rows={3}
               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+              disabled={isSaving}
             />
           </div>
 
@@ -253,10 +294,11 @@ function CreateSurveyPage() {
               placeholder="เช่น: เช็กซิ? คุณกำลังเสี่ยงมะเร็งปากมดลูกอยู่หรือไม่"
               rows={2}
               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+              disabled={isSaving}
             />
           </div>
 
-          {/* Department, Phone, Disease Info - Mobile Stacked */}
+          {/* Department, Phone, Disease Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
@@ -268,6 +310,7 @@ function CreateSurveyPage() {
                 onChange={(e) => setDepartment(e.target.value)}
                 placeholder="เช่น ศูนย์นรีเวช"
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                disabled={isSaving}
               />
             </div>
 
@@ -281,6 +324,7 @@ function CreateSurveyPage() {
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="0-2596-7888 ต่อ 2401-2"
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                disabled={isSaving}
               />
             </div>
 
@@ -294,11 +338,58 @@ function CreateSurveyPage() {
                 onChange={(e) => setDiseaseInfo(e.target.value)}
                 placeholder="เช่น Diabetes Type 2"
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                disabled={isSaving}
               />
             </div>
           </div>
 
-          {/* Hero Image Upload - Mobile Responsive */}
+          {/* Date Fields - NEW! */}
+          <div className="border-t pt-6">
+            <h3 className="text-base sm:text-lg font-semibold mb-4">ระยะเวลาแบบประเมิน</h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                  วันที่เริ่มต้น <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                  disabled={isSaving}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    id="hasEndDate"
+                    checked={hasEndDate}
+                    onChange={(e) => setHasEndDate(e.target.checked)}
+                    className="w-4 h-4 text-black focus:ring-black border-gray-300 rounded"
+                    disabled={isSaving}
+                  />
+                  <label htmlFor="hasEndDate" className="text-xs sm:text-sm font-medium text-gray-700">
+                    กำหนดวันที่สิ้นสุด
+                  </label>
+                </div>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  disabled={!hasEndDate || isSaving}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {hasEndDate ? 'แบบประเมินจะหมดอายุในวันที่กำหนด' : 'ไม่กำหนดวันหมดอายุ (เปิดใช้งานตลอด)'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Hero Image Upload */}
           <div>
             <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
               รูปภาพหน้าปก
@@ -321,6 +412,7 @@ function CreateSurveyPage() {
                   accept="image/*"
                   onChange={handleImageUpload}
                   className="hidden"
+                  disabled={isSaving}
                 />
               </label>
 
@@ -337,7 +429,7 @@ function CreateSurveyPage() {
           </div>
         </div>
 
-        {/* Questions Section - Mobile Responsive */}
+        {/* Questions Section */}
         <div className="border-t pt-8 sm:pt-12">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
             <div>
@@ -346,7 +438,8 @@ function CreateSurveyPage() {
             </div>
             <button
               onClick={handleAddQuestion}
-              className="flex items-center justify-center gap-2 bg-black hover:bg-gray-800 text-white px-4 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 bg-black hover:bg-gray-800 text-white px-4 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
               เพิ่มคำถาม
@@ -356,7 +449,7 @@ function CreateSurveyPage() {
           <div className="space-y-6 sm:space-y-8">
             {questions.map((question, qIndex) => (
               <div key={question.id} className="bg-gray-50 rounded-2xl p-4 sm:p-6 relative">
-                {/* Question Header - Mobile Responsive */}
+                {/* Question Header */}
                 <div className="flex items-start gap-2 sm:gap-3 mb-4 sm:mb-6">
                   <div className="flex items-center gap-1 sm:gap-2 mt-2 sm:mt-3">
                     <GripVertical size={18} className="text-gray-400 cursor-move sm:w-5 sm:h-5" />
@@ -371,6 +464,7 @@ function CreateSurveyPage() {
                       value={question.question}
                       onChange={(e) => handleQuestionChange(question.id, e.target.value)}
                       placeholder="พิมพ์คำถาม"
+                      disabled={isSaving}
                       className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-0 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-base sm:text-lg font-medium"
                     />
                   </div>
@@ -378,7 +472,8 @@ function CreateSurveyPage() {
                   {questions.length > 1 && (
                     <button
                       onClick={() => handleDeleteQuestion(question.id)}
-                      className="mt-2 sm:mt-3 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
+                      disabled={isSaving}
+                      className="mt-2 sm:mt-3 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 disabled:opacity-50"
                       title="ลบคำถาม"
                     >
                       <Trash2 size={18} className="sm:w-5 sm:h-5" />
@@ -386,7 +481,7 @@ function CreateSurveyPage() {
                   )}
                 </div>
 
-                {/* Answers - Mobile Responsive */}
+                {/* Answers */}
                 <div className="ml-6 sm:ml-11 space-y-3">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs sm:text-sm font-medium text-gray-600">ตัวเลือกคำตอบ</p>
@@ -408,6 +503,7 @@ function CreateSurveyPage() {
                           value={answer.text}
                           onChange={(e) => handleAnswerChange(question.id, answer.id, 'text', e.target.value)}
                           placeholder="พิมพ์คำตอบ"
+                          disabled={isSaving}
                           className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 text-sm sm:text-base border-0 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
                         />
                       </div>
@@ -418,6 +514,7 @@ function CreateSurveyPage() {
                           value={answer.score}
                           onChange={(e) => handleAnswerChange(question.id, answer.id, 'score', parseInt(e.target.value) || 0)}
                           placeholder="0"
+                          disabled={isSaving}
                           className="w-16 sm:w-20 px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base border-0 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-black text-center"
                         />
                         <span className="text-xs text-gray-500">คะแนน</span>
@@ -425,7 +522,8 @@ function CreateSurveyPage() {
                         {question.answers.length > 1 && (
                           <button
                             onClick={() => handleDeleteAnswer(question.id, answer.id)}
-                            className="text-gray-400 hover:text-red-600 transition-colors ml-1"
+                            disabled={isSaving}
+                            className="text-gray-400 hover:text-red-600 transition-colors ml-1 disabled:opacity-50"
                             title="ลบคำตอบ"
                           >
                             <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -437,7 +535,8 @@ function CreateSurveyPage() {
 
                   <button
                     onClick={() => handleAddAnswer(question.id)}
-                    className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 hover:text-black font-medium mt-3 sm:mt-4 px-2 py-1"
+                    disabled={isSaving}
+                    className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 hover:text-black font-medium mt-3 sm:mt-4 px-2 py-1 disabled:opacity-50"
                   >
                     <Plus size={14} className="sm:w-4 sm:h-4" />
                     เพิ่มคำตอบ
@@ -448,7 +547,7 @@ function CreateSurveyPage() {
           </div>
         </div>
 
-        {/* Bottom Actions - Mobile Responsive */}
+        {/* Bottom Actions */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mt-8 sm:mt-12 pt-6 sm:pt-8 border-t">
           <p className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
             <span className="text-red-500">*</span> ช่องที่จำเป็นต้องกรอก
@@ -456,9 +555,10 @@ function CreateSurveyPage() {
           
           <button 
             onClick={handleSubmit}
-            className="w-full sm:w-auto bg-black hover:bg-gray-800 text-white px-6 sm:px-8 py-3 rounded-xl font-medium transition-colors"
+            disabled={isSaving}
+            className="w-full sm:w-auto bg-black hover:bg-gray-800 text-white px-6 sm:px-8 py-3 rounded-xl font-medium transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            สร้างแบบประเมิน
+            {isSaving ? 'กำลังบันทึก...' : 'สร้างแบบประเมิน'}
           </button>
         </div>
       </div>
