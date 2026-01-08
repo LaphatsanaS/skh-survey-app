@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/skh-survey-app/static/css/main.c8576662.css",
-    "main.js": "/skh-survey-app/static/js/main.9d9a563b.js",
+    "main.css": "/skh-survey-app/static/css/main.9a57046b.css",
+    "main.js": "/skh-survey-app/static/js/main.5e4f4784.js",
     "static/js/453.4d1023dd.chunk.js": "/skh-survey-app/static/js/453.4d1023dd.chunk.js",
     "index.html": "/skh-survey-app/index.html",
-    "main.c8576662.css.map": "/skh-survey-app/static/css/main.c8576662.css.map",
-    "main.9d9a563b.js.map": "/skh-survey-app/static/js/main.9d9a563b.js.map",
+    "main.9a57046b.css.map": "/skh-survey-app/static/css/main.9a57046b.css.map",
+    "main.5e4f4784.js.map": "/skh-survey-app/static/js/main.5e4f4784.js.map",
     "453.4d1023dd.chunk.js.map": "/skh-survey-app/static/js/453.4d1023dd.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.c8576662.css",
-    "static/js/main.9d9a563b.js"
+    "static/css/main.9a57046b.css",
+    "static/js/main.5e4f4784.js"
   ]
 }
